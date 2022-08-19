@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TERA MODELING</title>
+</head>
+<script>
+    if(typeof global!=="object")
+        global=window;
+</script>
+<script type="text/javascript" src="./../extlib/sha3.js"></script>
+<script type="text/javascript" src="./../extlib/RBTree.js"></script>
+<script type="text/javascript" src="./../extlib/terabuf.js"></script>
+
+<script type="text/javascript" src="../src/lib/cache-block.js"></script>
+<script type="text/javascript" src="../src/lib/time-sync.js"></script>
+
+
+<script type="text/javascript" src="./model-lib.js"></script>
+
+<script type="text/javascript" src="./../src/index.js"></script>
+<script type="text/javascript" src="./../src/jinn-log.js"></script>
+<script type="text/javascript" src="./../src/jinn-stat.js"></script>
+
+<script type="text/javascript" src="../src/db/jinn-db-base.js"></script>
+<script type="text/javascript" src="../src/db/jinn-db-row.js"></script>
+<script type="text/javascript" src="../src/db/jinn-db-item.js"></script>
+<script type="text/javascript" src="../src/db/jinn-db-chain.js"></script>
+<script type="text/javascript" src="../src/db/cache-db.js"></script>
+<script type="text/javascript" src="../src/db/jinn-db-cache-body.js"></script>
+<script type="text/javascript" src="../src/db/jinn-db-cache-block.js"></script>
+<!--<script type="text/javascript" src="../src/db/jinn-db-cache-hot.js"></script>-->
+<!--<script type="text/javascript" src="../src/db/jinn-db-cache-jump.js"></script>-->
+
+<script type="text/javascript" src="./../src/jinn-block-db.js"></script>
+
+
+<script type="text/javascript" src="./../src/jinn-connect.js"></script>
+<script type="text/javascript" src="./../src/jinn-connect-item.js"></script>
+<script type="text/javascript" src="./../src/jinn-connect-handshake.js"></script>
+<script type="text/javascript" src="./../src/jinn-connect-speed.js"></script>
+<script type="text/javascript" src="./../src/jinn-connect-score.js"></script>
+<script type="text/javascript" src="./../src/jinn-connect-addr.js"></script>
+<script type="text/javascript" src="./../src/jinn-connect-hot.js"></script>
+
+<script type="text/javascript" src="./../src/jinn-session.js"></script>
+<script type="text/javascript" src="./../src/jinn-ticket.js"></script>
+<script type="text/javascript" src="./../src/jinn-tx.js"></script>
+<script type="text/javascript" src="./../src/jinn-tx-err.js"></script>
+<script type="text/javascript" src="./../src/jinn-tx-priority.js"></script>
+<script type="text/javascript" src="./../src/jinn-tx-control.js"></script>
+<script type="text/javascript" src="./../src/jinn-tx-resend.js"></script>
+
+
+<script type="text/javascript" src="./../src/jinn-block.js"></script>
+<script type="text/javascript" src="./../src/jinn-block-mining.js"></script>
+
+<script type="text/javascript" src="./../src/jinn-consensus-chain.js"></script>
+<script type="text/javascript" src="./../src/jinn-consensus.js"></script>
+<script type="text/javascript" src="./../src/jinn-consensus-boost.js"></script>
+<script type="text/javascript" src="./../src/jinn-net-cache.js"></script>
+<script type="text/javascript" src="./../src/jinn-startup-loader.js"></script>
+
+<script type="text/javascript" src="./../src/jinn-timing.js"></script>
+<script type="text/javascript" src="./../src/jinn-time-sync.js"></script>
+
+
+<script type="text/javascript" src="./../src/jinn-filter.js"></script>
+<script type="text/javascript" src="./../src/jinn-net.js"></script>
+
+<script type="text/javascript" src="./../src/jinn-sharding.js"></script>
+
+<script type="text/javascript" src="./model-network.js"></script>
+<script type="text/javascript" src="./model-node.js"></script>
+
+<!--<script type="text/javascript" src="./../src/terabuf.js"></script>-->
+<script type="text/javascript" src="./../src/jinn-serialize.js"></script>
+
+
+
+<script type="text/javascript" src="./model-environment.js"></script>
+
+<script type="text/javascript" src="./../test/testdb.js"></script>
+
+<script type="text/javascript" src="../../HTML/JS/diagram.js"></script>
+
+
+<script>
+    var glIdArr=["idDeleteNode","idTxCount","idUseTicket","idNodeCount","idUseSplitter","idUseBlockCache","idUsePackMaxHash","idBlockPerSec","idMinLatency","idShowDiagram","idTestMode1","idTestMode2","idTestMode3","idRndTx"];
+    global.DEBUG_ID=0
+    //global.DEBUG_ID="HOT";
+
+    var glWorking=1;
+    var glWorkNum=0;
+    var MaxNode=2;//69;
+
+    var MaxCell2D=69;
+
+
+
+    var MODEL;
+    var glDeltaScreenX=0;
+    var glDeltaScreenY=0;
+    function InitNodes()
+    {
+        MODEL=CreateModel(MaxNode,1);
+    }
+    function Start(Mode)
+    {
+        glWorking=Mode;
+    }
+    var PrevCurBlockNum=0;
+    var glKeccakCountAvg=0;
+
+    function MainWorkLoop()
+    {
+        //setInterval(MainWorkLoopNext,100);return;
+
+        var Time1=Date.now();
+        MainWorkLoopNext();
+        var Delta=Date.now()-Time1;
+        var Period=JINN_CONST.CONSENSUS_PERIOD_TIME/10;
+
+
+        JINN_CONST.MULT_TIME_PERIOD=1/$("idBlockPerSec").value;
+        Period=Period/$("idBlockPerSec").value;
+
+        Period-=Delta;
+        if(Period<5)
+            Period=5;
+
+        setTimeout(MainWorkLoop,Period);
+    }
+
+    function MainWorkLoopNext()
+    {
+        //Точка входа: исполнение асинхронной части (тика программы) и отрисовка
+        if(!MODEL)
+            return;
+
+        if(!glWorking)
+            return;
+        global.glUseSplitter=$("idUseSplitter").checked;
+        global.glTestMode1=$("idTestMode1").checked;
+        global.glTestMode2=$("idTestMode2").checked;
+        global.glTestMode3=$("idTestMode3").checked;
+        global.glRndTx=$("idRndTx").checked;
+
+
+
+
+        if(+$("idTxCount").value<0)
+            $("idTxCount").value=0;
+        JINN_CONST.MAX_TRANSACTION_COUNT=parseInt($("idTxCount").value);
+
+        global.glMinLatency=parseInt($("idMinLatency").value);
+        global.glUseTicket=$("idUseTicket").checked;
+        global.glUseBlockCache=$("idUseBlockCache").checked;
+        global.glUsePackMaxHash=$("idUsePackMaxHash").checked;
+
+
+
+
+        MaxNode=parseInt($("idNodeCount").value);
+        MODEL.MaxNodeCount=MaxNode;
+        if(MaxNode<1)
+            MaxNode=1;
+        global.CREATE_TX_PER_NODE=Math.floor(0.999+JINN_CONST.MAX_TRANSACTION_COUNT/MaxNode);
+
+        var CurBlockNum=JINN_EXTERN.GetCurrentBlockNumByTime();
+        var Str="Lid:"+JINN_CONST.MAX_LEADER_COUNT+" Block:"+CurBlockNum+" Tik:"+glWorkNum;
+        $("idWorkNum").innerText=Str;
+
+        var NodeCount=MODEL.NodeCount;
+        if(CurBlockNum!==PrevCurBlockNum && NodeCount)
+        {
+            Str=MODEL.GetInfoString();
+            Str=Str.replace(/[\n]/g, "<BR>");
+            SetStatus("<b>Node stats:</b><BR>"+Str);
+
+            JINN_STAT.Clear();
+            PrevCurBlockNum=CurBlockNum;
+        }
+
+        glWorkNum++;
+        if(NodeCount && typeof glKeccakCount==="number")
+            glKeccakCountAvg=Math.floor(10*glKeccakCount/glWorkNum/NodeCount);
+
+        var AddCount=Math.max(10,Math.floor(MaxNode/10));
+        MODEL.AddNode(AddCount,MaxNode);
+
+        var DeltaAdd=1;
+        var DeltaDelete=DeltaAdd;
+        if(MODEL.NodeCount<4*MaxNode/5)
+            DeltaAdd=DeltaAdd*2;
+
+        if($("idDeleteNode").checked)
+        if(glWorkNum>=10 && glWorkNum%50===0)
+        {
+            MODEL.AddNodeHole(DeltaAdd,MaxNode);
+            MODEL.DeleteNode(DeltaDelete,MaxNode);
+        }
+
+        if(MODEL.NodeCount)
+            MODEL.DoRun();
+
+        if(glWorkNum%2===0)
+            Draw();
+
+
+    }
+
+    var WasDrawTimeOut=0;
+    function Draw()
+    {
+        //return;
+        if(WasDrawTimeOut)
+            return;
+        WasDrawTimeOut=1;
+        setTimeout(DrawScreen,50);
+    }
+
+    function DrawScreen()
+    {
+        WasDrawTimeOut=0;
+
+        var StrType="Polar";
+        Draw2D();
+    }
+
+
+    function Draw2D()
+    {
+        var StrType="Polar";
+
+
+        var Arr=MODEL.NetNodeArr;
+        if(!Arr.length)
+            return;
+        var MaxCount=Math.min(Arr.length,MaxCell2D);
+
+
+        var obj = $("idMap");
+        obj.width=obj.offsetWidth;
+        obj.height=obj.offsetHeight;
+
+
+
+        //SetStatus("=>"+obj.width+":"+obj.height);
+        var MaxX=obj.width;
+        var MaxY=obj.height;
+        var PaddingMap=100;
+        var PaddingNode=30;
+
+        var x=PaddingMap;
+        var y=PaddingMap;
+        var W=400;
+        var R=23;//Math.sqrt(W)/2;
+
+        var phi=0;
+        var radius=2*R+PaddingNode;
+
+        var ArrXY=[];
+        for(var i=0;i<MaxCount;i++)
+        {
+            var Node=Arr[i];
+            Node.r=R;
+
+
+            if(StrType==="Random")
+            {
+                if(!Node.Draw.Random2D)
+                {
+                    var Draw=Node.Draw;
+                    Draw.Random2D=1;
+
+                    Draw.Num=i;
+
+                    var coord2d=[0,0];
+                    FillCoord(Node.IDArr[31],coord2d,3);
+
+                    Draw.x=coord2d[0]*2;
+                    Draw.y=coord2d[1]*2;
+
+                }
+
+                var x,y;
+                for(var Count=0;Count<256;Count++)
+                {
+                    var coord2d=[0,0];
+                    FillCoord(Count,coord2d,4);
+                    x=Node.Draw.x+coord2d[0];
+                    y=Node.Draw.y+coord2d[1];
+
+                    var NumAddr=y*10+x;
+                    if(!ArrXY[NumAddr])
+                    {
+                        ArrXY[NumAddr]=1;
+
+                        //y -= coord2d[1]*0.01;
+
+                        break;
+                    }
+                }
+
+
+
+                Node.x0=x*(MaxX-2*PaddingMap)/14+PaddingMap;
+                Node.y0=y*(MaxY-2*PaddingMap)/14+PaddingMap;
+
+
+            }
+            else
+            if(StrType==="Polar")
+            {
+                Node.x0=MaxX/2+radius*Math.sin(Math.PI*phi/180);
+                Node.y0=MaxY/2+radius*Math.cos(Math.PI*phi/180);
+
+
+                var delta=R+PaddingNode;
+                var dphi2=180*Math.atan(delta/radius)/Math.PI;
+                phi+=dphi2*2;
+                if(phi>=360-dphi2)
+                {
+                    phi=0;
+                    radius+=2*R+PaddingNode;
+                }
+            }
+            else
+            if(StrType==="Decart")
+            {
+                Node.x0=x;
+                Node.y0=y;
+
+
+                x=x+2*R+PaddingNode;
+                if(x>=MaxX-R-PaddingMap)
+                {
+                    x=PaddingMap;
+                    y=y+2*R+PaddingNode;
+                }
+            }
+            else
+            {
+                SetStatus("Error type:"+StrType)
+            }
+
+            if(Node.Norm)
+            {
+                Node.x0=Node.x_norm;
+                Node.y0=Node.y_norm;
+            }
+            else
+            {
+                Node.Norm=1;
+                Node.x_norm=Node.x0;
+                Node.y_norm=Node.y0;
+            }
+
+
+            //glScale + Screen move
+            Node.x=Node.x0*glScale+glDeltaScreenX;
+            Node.y=Node.y0*glScale+glDeltaScreenY;
+
+        }
+
+        //canvas draw
+        var ctx     = obj.getContext('2d');
+        ctx.fillStyle = "#ebebeb";
+        ctx.fillRect(0, 0, obj.width, obj.height);
+
+        ctx.setLineDash([5, 3]);
+
+        for(var i=0;i<MaxCount;i++)
+        {
+            var Node=Arr[i];
+            DrawNodeLink(Node,ctx);
+        }
+
+        ctx.setLineDash([]);
+
+
+
+        MODEL.CalcMaxConsensusHash();
+        var CurBlockNum=GetLastBlockNum();
+
+        for(var i=0;i<MaxCount;i++)
+        {
+            var Node=Arr[i];
+            var Block;
+            if(Node.GetBlockDB)
+                Block=Node.GetBlockDB(CurBlockNum);
+            else
+                Block={BlockNum:0};
+
+
+            DrawNode(Node,Block,ctx);
+        }
+
+        DrawNodeDiagram();
+    }
+
+
+    function DrawNode(Node,Block,ctx)
+    {
+        ctx.lineWidth=2;
+
+        ctx.fillStyle="#181c43";
+        if(Node.New)
+            ctx.fillStyle="#181c57";
+        ctx.strokeStyle = "#000";
+
+        if(IsMouseOverNode(Node))
+        {
+            ctx.fillStyle="#22267f";
+        }
+
+        if(Node===glCurrentViewNode)
+        {
+            ctx.strokeStyle = "#fffa5f";
+            ctx.lineWidth=4;
+        }
+
+
+
+        ctx.beginPath();
+        ctx.arc(Node.x,Node.y,Node.r,0,2 * Math.PI);
+        ctx.stroke();
+        ctx.fill();
+
+        if(Node.Del)
+            return;
+
+
+        ctx.fillStyle="#fff";
+        //if(Node.Num===0)
+        if(Node===glCurrentViewNode)
+            ctx.fillStyle= "#fffa5f";
+        if(Node.Err)
+            ctx.fillStyle= "#ff6511";
+
+//        if(Node.New)
+//            ctx.fillStyle= "#fff";
+
+        ctx.fillText(Node.Name,Node.x-Node.r,Node.y-4);
+
+        var Str1="";
+        var Str2="";
+//        if(Node.TestValue)
+//        {
+//            Str1="="+Node.TestValue+"=";
+//            ctx.fillText(Str1,Node.x-Str1.length*3,Node.y+10);
+//        }
+//        else
+        if(Block)
+        {
+            //Str1=""+(Block.Hash%10000);
+            Str1=""+(Block.BlockNum%10000);
+            Str2=""+Block.SumPow;
+            //Str2=""+Block.Power;
+        }
+        else
+        {
+            Str1=""+Node.Header1+"-"+Node.Header2;
+            Str2=""+Node.Block1+"-"+Node.Block2;
+        }
+        ctx.fillText(Str1,Node.x-Str1.length*3,Node.y+8);
+        ctx.fillText(Str2,Node.x-Str2.length*3,Node.y+16);
+
+    }
+
+    function FindInHot(Node,IDStr)
+    {
+        var Arr=Node.LevelArr;
+        for(var i=0;i<Arr.length;i++)
+        {
+            var Child=Arr[i];
+            if(Child && Child.IDStr===IDStr)
+                return 1;
+        }
+        return 0;
+    }
+    function DrawNodeLink(Node,ctx)
+    {
+        if(Node.Del)
+            return;
+
+        ctx.lineWidth=1;
+        var StrColor = "#919098";
+        if(IsMouseOverNode(Node))
+        {
+            ctx.lineWidth=3;
+            StrColor = "#47c424";
+        }
+
+        var Arr=Node.LevelArr;
+        for(var i=0;i<Arr.length;i++)
+        {
+            var Child=Arr[i];
+            if(Child && Child.IsOpen())
+            {
+                var ChildNode;
+                if(Child.LinkChild)
+                    ChildNode=Child.LinkChild.Node;
+                else
+                    ChildNode=MODEL.GetNodeByAddr(Child.IDStr);
+                if(ChildNode)
+                {
+//                    var Child2=ChildNode.RetConnect(Node.IDStr);
+//                    ChildNode.CheckHotConnection(Child2);
+
+                    ctx.strokeStyle = StrColor;
+
+                    if(!Child.IsHot())
+                    {
+                        ctx.strokeStyle = "#c42d2d";
+                        continue;
+                    }
+
+//                    if(Child.Disconnect)
+//                        ctx.strokeStyle = "#c42d2d";
+
+                    if(ChildNode.Del)
+                    {
+                        ctx.strokeStyle = "#ff73f0";
+                        //ToLog("DELETED LINK: "+ChildNode.Name+" \nIDStr1="+ChildNode.IDStr+"\nIDStr2="+Child.IDStr);
+                    }
+
+
+                    if(!FindInHot(ChildNode,Node.IDStr))
+                    {
+                        ctx.strokeStyle = "#e23131";
+                        continue;
+                    }
+
+
+                    ctx.beginPath();
+                    ctx.moveTo(Node.x,Node.y);
+                    ctx.lineTo(ChildNode.x,ChildNode.y);
+                    //ToLog(""+Node.x+"-"+Child.x);
+                    ctx.stroke();
+                }
+            }
+        }
+
+    }
+
+
+
+    //Calc
+    function GetLastBlockNum()
+    {
+        var CurBlockNum=JINN_EXTERN.GetCurrentBlockNumByTime();
+        return CurBlockNum-JINN_CONST.STEP_LAST;
+    }
+
+
+
+
+    //Log info
+    function DoLogNodeInfo(Node)
+    {
+        if(!Node)
+        {
+            if(typeof global.DEBUG_ID==="number")
+                global.DEBUG_ID=0;
+            return;
+        }
+
+        ToLog("-------------------- "+Node.Name+" --------------------");
+
+
+        ArrDataToLog(Node,"DB",function (BlockNum)
+        {
+            var Block=Node.GetBlockDB(BlockNum);
+            Node.CheckLoadBody(Block);
+            return Block.TxData;
+        });
+
+        //if(0)
+        ArrDataToLog(Node,"POW",function (BlockNum)
+        {
+            var Arr=[];
+            var Store=Node.GetLiderArrAtNum(BlockNum);
+            var LiderArr=Store.LiderArr;
+            for(var n=0;n<LiderArr.length;n++)
+            {
+                var NodeStatus=LiderArr[n];
+
+                //var Value="M:"+NodeStatus.Miner+" "+NodeStatus.Power;
+                var Value=NodeStatus.Power;
+                if(NodeStatus.LoadNum)
+                    Value=""+Value+"<-H:"+NodeStatus.LoadNum;
+                else
+                if(NodeStatus.LoadTreeNum)
+                    Value=""+Value+"<-B:"+NodeStatus.LoadTreeNum;
+
+                Arr.push(Value);
+            }
+            return Arr;
+        });
+
+
+
+
+
+        if(0)
+        {
+            ToLog("------------------------------------Childs: "+Node.ConnectArray.length);
+            var Arr=Node.LevelArr;
+            ToLog("***HOTS***"+Arr.length);
+            for(var i=0;i<Arr.length;i++)
+            {
+                var Child=Arr[i];
+                if(Child)
+                {
+                    ToLog(""+i+" : "+Child.ID);
+                }
+            }
+
+            Arr=Node.GetTopTreeScoreArr(100);
+            ToLog("***Tree***"+Arr.length);
+            for(var i=0;i<Arr.length;i++)
+            {
+                var Child=Arr[i];
+                if(Child)// && Child.IsOpen())
+                {
+                    //var ChildNode=MODEL.GetNodeByAddr(Child.IDStr)
+                    var StrActive=" Active: "+(Child.IsOpen()?"1":0);
+                    var StrHot=" Hot: "+(Child.IsHot()?"1":0);
+                    var StrHotStart=" HotStart:"+(Child.HotStart?(Date.now()-Child.HotStart)/1000+" s":"no");
+                    var StrHotDeny=" HotDeny:"+(Child.DenyHotStart?(Date.now()-Child.DenyHotStart)/1000+" s":"no");
+                    var StrScore=" Score: "+GetNum(Child.Score);
+
+                    ToLog(""+Child.ID+StrActive+StrHot+StrHotStart+StrHotDeny+StrScore);//" WAS:"+GetNum(Child.WasStartHot1)+"-"+GetNum(Child.WasStartHot2)
+                }
+            }
+        }
+    }
+    function GetNum(sum)
+    {
+        if(sum)
+            return sum;
+        else
+            return 0;
+    }
+
+    function ArrDataToLog(Node,Text,F)
+    {
+        //var CurBlockNum=GetLastBlockNum();
+        var CurBlockNum=JINN_EXTERN.GetCurrentBlockNumByTime();
+//        var MaxBlockNum=Node.GetMaxNumBlockDB();
+//        if(CurBlockNum-6>MaxBlockNum)
+//        {
+//            ToLog("MaxBlockNum="+MaxBlockNum)
+//            CurBlockNum=MaxBlockNum;
+//        }
+
+        var Arr=[];
+        for(var d=JINN_CONST.STEP_LAST+2;d>=0;d--)
+        {
+            var BlockNum=CurBlockNum-d;
+            var Block=Node.GetBlockDB(BlockNum);
+            if(!Block)
+                continue;
+            Node.CheckLoadBody(Block);
+
+            var ArrTx=F(Block.BlockNum);
+            if(!ArrTx || !ArrTx.length)
+                ArrTx=[null];
+            for(var n=0;n<ArrTx.length;n++)
+            {
+                var Tx=ArrTx[n];
+
+                if(!Arr[n])
+                    Arr[n]={};
+                var name="B:"+BlockNum;
+                var text;
+                if(Tx!==null && typeof Tx==="object")
+                    text=Tx.KEY;//.substr(0,6);
+                else
+                    text=Tx;
+                 //text=JSON.stringify(Tx);
+                Block.Miner = ReadUintFromArr(Block.MinerHash, 0);
+                var MaxHashB=glMaxHashMap[BlockNum];
+                if(MaxHashB)
+                    name=name+" P="+MaxHashB.Power+" M="+Block.Miner+(Block.Miner===MaxHashB.Miner?"":"/"+MaxHashB.Miner);
+                else
+                    name=name+" M="+Block.Miner;
+
+                if(Node.IsMaxHash(Block)!==1)
+                    name+=" !!";
+
+
+                Arr[n][name]=text;
+            }
+        }
+
+        ToLog(Text);
+        ToLog(Arr);
+    }
+
+    //Action
+    function IsMouseOverNode(Node)
+    {
+        if(glMoveMouse)
+        {
+            var dx=Node.x-glMoveMouse.x;
+            var dy=Node.y-glMoveMouse.y;
+            var dl2=dx*dx+dy*dy;
+            if(dl2<Node.r*Node.r)
+            {
+
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+
+    function FindCurrentNode()
+    {
+        var Arr=MODEL.NetNodeArr;
+        var MaxCount=Math.min(Arr.length,MaxCell2D);
+        for(var i=0;i<MaxCount;i++)
+        {
+            var Node=Arr[i];
+            if(IsMouseOverNode(Node))
+            {
+                Node.dx=Node.x-glMoveMouse.x;
+                Node.dy=Node.y-glMoveMouse.y;
+                return Node;
+            }
+        }
+
+        return undefined;
+    }
+
+    function MoveNode()
+    {
+        var Node=glCurrentNode;
+        if(Node)
+        {
+            var x_norm=(Node.dx+glMoveMouse.x-glDeltaScreenX)/glScale;
+            var y_norm=(Node.dy+glMoveMouse.y-glDeltaScreenY)/glScale;
+
+            if(Node.x_norm!==x_norm || Node.y_norm!==y_norm)
+            {
+                Node.Norm=1;
+                Node.x_norm=x_norm;
+                Node.y_norm=y_norm;
+            }
+        }
+    }
+
+    function MoveScreen()
+    {
+        if(glMouseClick)
+        {
+            glDeltaScreenX+=glMoveMouse.x-glMouseClick.x;
+            glDeltaScreenY+=glMoveMouse.y-glMouseClick.y;
+            glMouseClick=glMoveMouse;
+        }
+    }
+
+
+    function DoNormalizationXY()
+    {
+        var Arr=MODEL.NetNodeArr;
+        var MaxCount=Math.min(Arr.length,MaxCell2D);
+
+        var obj = $("idMap");
+        var CentrX=obj.width/2;
+        var CentrY=obj.height/2;
+
+        //инициализация
+        var rad1=GetRadius();
+
+        //перемещение к центру относительно связей
+        for(var m=0;m<5;m++)
+        for(var i=0;i<MaxCount;i++)
+        {
+            var Node=Arr[i];
+            if(Node.Del)
+                continue;
+
+            //помещаем ноды на место возможного центра
+            var Count=0;
+            var SumX=0;
+            var SumY=0;
+            for(var n=0;n<Node.LevelArr.length;n++)
+            {
+                var Item=Node.LevelArr[n];
+                if(Item)
+                {
+                    var Child=MODEL.GetNodeByAddr(Item.IDStr);
+                    if(Child && Child.Norm)
+                    {
+                        Count++;
+                        SumX+=Child.x_norm;
+                        SumY+=Child.y_norm;
+                    }
+                }
+            }
+            if(Count>=2)
+            {
+                var x=SumX/Count;
+                var y=SumY/Count;
+                Node.x_norm+=(x-Node.x_norm)/10;
+                Node.y_norm+=(y-Node.y_norm)/10;
+
+//                if(isNaN(Node.x_norm))
+//                    ToLog("#3 isNaN "+Node.Name+"  x_norm="+Node.x_norm+" SumX="+SumX);
+
+            }
+        }
+        var rad2=GetRadius();
+
+        if(!rad2)
+            rad2=1;
+        var Mult=rad1/rad2;
+
+
+        //расширение диаметра
+        for(var i=0;i<MaxCount;i++)
+        {
+            var Node=Arr[i];
+            if(Node.Del)
+                continue;
+
+            var x=Node.x_norm-CentrX;
+            var y=Node.y_norm-CentrY;
+
+            Node.x_norm=x*Mult+CentrX;
+            Node.y_norm=y*Mult+CentrY;
+        }
+
+        var rad3=GetRadius();
+        //ToLog("r1="+rad1+" r2="+rad2+" r3="+rad3+" Mult="+Mult);
+
+        //центрирование
+        //DoCentrNodes();
+
+
+        Draw();
+    }
+
+    function DoCentrNodes()
+    {
+        var Arr=MODEL.NetNodeArr;
+        var MaxCount=Math.min(Arr.length,MaxCell2D);
+
+        var obj = $("idMap");
+        var MaxX=obj.width;
+        var MaxY=obj.height;
+
+        var Count=0;
+        var SumX=0;
+        var SumY=0;
+        for(var i=0;i<MaxCount;i++)
+        {
+            var Node=Arr[i];
+            if(Node.Del)
+                continue;
+
+            SumX+=Node.x_norm;
+            SumY+=Node.y_norm;
+            Count++;
+        }
+
+        var x=SumX/Count;
+        var y=SumY/Count;
+
+        var rad2=GetRadius();
+        ToLog("x2="+rad2.x+" y2="+rad2.y+" Count="+Count+" SumX="+SumX)
+
+        for(var i=0;i<MaxCount;i++)
+        {
+            var Node=Arr[i];
+            if(Node.Del)
+                continue;
+            Node.x_norm-=x;
+            Node.y_norm-=y;
+
+            Node.x_norm+=MaxX/2;
+            Node.y_norm+=MaxY/2;
+        }
+
+    }
+
+    function GetRadius()
+    {
+        var Arr=MODEL.NetNodeArr;
+        var MaxCount=Math.min(Arr.length,MaxCell2D);
+
+
+        var obj = $("idMap");
+        var CentrX=obj.width/2;
+        var CentrY=obj.height/2;
+
+        var Count=0;
+        var SumR=0;
+        for(var i=0;i<MaxCount;i++)
+        {
+            var Node=Arr[i];
+            if(Node.Del)
+                continue;
+
+            if(!Node.Norm)
+                continue;
+
+            var x=Node.x_norm-CentrX;
+            var y=Node.y_norm-CentrY;
+            SumR+=Math.sqrt(x*x+y*y);
+            Count++;
+        }
+
+        if(!Count)
+            Count=1;
+        return SumR/Count;
+    }
+
+    var glScale=1;
+    function ZoomMap(event)
+    {
+        event.preventDefault();
+
+        var obj = $("idMap");
+        var MaxX=obj.width;
+        var MaxY=obj.height;
+
+        var x1=MaxX/2*glScale;
+        var y1=MaxY/2*glScale;
+
+        //glScale += event.deltaY * -0.001;
+
+        var Mult=1+event.deltaY * -0.001;
+        glScale*=Mult;
+
+        if(glScale<0.01)
+            glScale=0.01;
+
+        //ToLog("glScale="+glScale+" event.deltaY="+event.deltaY)
+
+
+        var x2=MaxX/2*glScale;
+        var y2=MaxY/2*glScale;
+        var dx=x2-x1;
+        var dy=y2-y1;
+
+        glDeltaScreenX-=dx;
+        glDeltaScreenY-=dy;
+
+        Draw();
+    }
+
+
+    //Send
+    var glSendValue=0;
+    function OnDblClick(event)
+    {
+        //event.preventDefault();
+        //return;
+
+        var Node=FindCurrentNode();
+        if(Node)
+        {
+            Node.ClearDataBase();
+//            console.clear();
+//            global.DEBUG_ID=Node.ID;
+
+//            glSendValue++;
+//            ToLog("Send test to "+Node.Name);
+//            Node.SendTest(glSendValue);
+        }
+        else
+        {
+            if(!glScale)
+                return;
+
+            var coord=getMouse(event.srcElement,event);
+            coord.x = (coord.x-glDeltaScreenX)/glScale;
+            coord.y = (coord.y-glDeltaScreenY)/glScale;
+
+            ToLog("Add new node: "+JSON.stringify(coord));
+
+            var Node=MODEL.NewNode(MODEL.NodeCount);
+            Node.Norm=1;
+            Node.x_norm=coord.x;
+            Node.y_norm=coord.y;
+
+        }
+
+    }
+
+
+    //------------------------------
+
+    function $(id)
+    {
+        return document.getElementById(id);
+    }
+
+    function SetStatus(Str)
+    {
+        var id = $("idStatus");
+        id.innerHTML=Str;
+    }
+
+
+
+    var LMouseOn=false;
+    var LMouseOn2=false;
+    var glCurrentNode;
+    var glCurrentViewNode;
+    var glMoveMouse;
+    var glMouseClick;
+    function SetMouse(event,mode)
+    {
+        if(event.srcElement && event.srcElement.className.indexOf("map")>=0)
+        {
+            if(mode==="down")
+                LMouseOn=true;
+            else
+            if(mode==="up")
+                LMouseOn=false;
+
+            event.preventDefault();
+            var obj = event.srcElement;
+            glMoveMouse=getMouse(obj,event);
+            if(LMouseOn===true)
+            {
+                if(LMouseOn2!==LMouseOn)
+                {
+                    if(event.which===1)
+                    {
+                        glCurrentNode=FindCurrentNode();
+                        glCurrentViewNode=glCurrentNode;
+                        // DoLogNodeInfo(glCurrentNode);
+                    }
+                    else
+                    if(event.which===2)
+                    {
+                        glCurrentNode=FindCurrentNode();
+                        DoLogNodeInfo(glCurrentNode);
+
+                        glMouseClick=glMoveMouse;
+                    }
+                    else
+                    if(event.which===3)
+                    {
+                        glCurrentNode=FindCurrentNode();
+                        if(glCurrentNode)
+                            global.DEBUG_ID=glCurrentNode.ID;
+
+
+                    }
+                }
+
+
+                if(event.which===2)
+                    MoveScreen();
+                else
+                if(event.which===1)
+                    MoveNode();
+                Draw();
+            }
+
+            LMouseOn2=LMouseOn;
+            if(!LMouseOn)
+            {
+                glMouseClick=undefined;
+                glCurrentNode=undefined;
+                if(typeof global.DEBUG_ID==="number")
+                    global.DEBUG_ID=0;
+
+            }
+        }
+    }
+
+
+    //LIB
+    //LIB
+    //LIB
+    //LIB
+    function SaveValues()
+    {
+        var Arr=glIdArr;
+        var prefix="Model-";
+        for(var i=0;i<Arr.length;i++)
+        {
+            var Name=Arr[i];
+            var Item=$(Name);
+            if(Item)
+            {
+                if(Item.type==="checkbox")
+                    localStorage.setItem(prefix+Name,0+Item.checked);
+                else
+                    localStorage.setItem(prefix+Name,Item.value);
+            }
+        }
+    }
+
+    function LoadValues()
+    {
+        var Arr=glIdArr;
+        var prefix="Model-";
+        for(var i=0;i<Arr.length;i++)
+        {
+            var Name=Arr[i];
+            var Item=document.getElementById(Name);
+            if(Item)
+            {
+                var Value=localStorage.getItem(prefix+Name);
+                if(Value!==undefined && Value!==null)
+                {
+                    if(Item.type==="checkbox")
+                        Item.checked=parseInt(Value);
+                    else
+                        Item.value=Value;
+                }
+            }
+        }
+    }
+
+    function SetVisibleBlock(name,bSet)
+    {
+        var Item=$(name);
+        if(bSet && typeof bSet==="string")
+            Item.style.display = bSet;
+        else
+        if(bSet)
+        {
+            Item.style.display = 'block';
+        }
+        else
+        {
+            Item.style.display = 'none';
+        }
+        return Item;
+    }
+
+    function getMouse(canvas,e)
+    {
+
+        var x = e.clientX - getTrueOffsetLeft(canvas);
+        if(window.pageXOffset)
+            x=x+window.pageXOffset;
+
+        var y = e.clientY - getTrueOffsetTop(canvas);
+        if(window.pageYOffset)
+            y=y+window.pageYOffset
+        var coord= {x:x,y:y};
+        return coord;
+    }
+    function getTrueOffsetLeft(ele)
+    {
+        var n = 0;
+        while (ele)
+        {
+            n += ele.offsetLeft || 0;
+            ele = ele.offsetParent;
+        }
+        return n;
+    }
+
+    function getTrueOffsetTop(ele)
+    {
+        var n = 0;
+        while (ele)
+        {
+            n += ele.offsetTop || 0;
+            ele = ele.offsetParent;
+        }
+        return n;
+    }
+
+    //Init
+
+
+    window.onload=function ()
+    {
+        LoadValues();
+
+        InitNodes();
+        MainWorkLoop();
+
+
+
+        $("idMap").onwheel  = ZoomMap;
+        $("idMap").ondblclick = OnDblClick;
+        $("idMap").oncontextmenu=function (event)
+        {
+            event.preventDefault();
+        };
+
+
+        window.addEventListener('mousedown',function (event)
+        {
+            SetMouse(event,"down");
+        }, false);
+        window.addEventListener('mouseup',function (event)
+        {
+            SetMouse(event,"up");
+        }, false);
+
+        window.onmousemove = function(event)
+        {
+            SetMouse(event);
+            if(window.SetDiagramMouseX)
+                SetDiagramMouseX(event);
+        }
+
+        if(window.InitDiagramByArr)
+            InitDiagramByArr([]);
+        DrawNodeDiagram();
+    }
+
+
+    window.onresize= function()
+    {
+        Draw();
+    };
+
+
+    //Diagrams
+    function DrawNodeDiagram()
+    {
+        if(!window.DrawDiagram)
+        {
+            SetVisibleBlock("idMaxHash",0);
+            return;
+        }
+        SetVisibleBlock("idMaxHash",$("idShowDiagram").checked);
+        if(!$("idShowDiagram").checked)
+            return;
+
+        var arr=[],arrX=[];
+        var CurBlockNum=JINN_EXTERN.GetCurrentBlockNumByTime();
+        var StartNum=Math.max(20,CurBlockNum-100);
+        for(var Num=StartNum;Num<=CurBlockNum;Num++)
+        {
+            var Value;
+            if(glCurrentViewNode)
+            {
+                Value=glCurrentViewNode.GetMaxHashTickNum(Num);
+            }
+            else
+            {
+                Value=GetMaxHashTickNum(Num);
+            }
+
+
+            if(!Value)
+                continue;
+
+
+            arrX.push(Num);
+            arr.push(Value);
+        }
+
+        DrawDiagramMy("MaxHash","idMaxHash",arr,arrX,"#313690",10);
+    }
+
+    function DrawDiagramMy(name,id,arr,arrX,red,KPrecision,MouseText)
+    {
+        var Item=DiagramMapId[id];
+        if(!Item)
+        {
+            Item={name:name,id:id,red:red,KPrecision:KPrecision};
+            Item.CountNameX=10;
+            Item.mouseX=550;
+            Item.fillStyle="#FFF";
+            Item.line=1;
+            Item.steptime=1;
+
+            DiagramMapId[id]=Item;
+            DiagramMap[name]=Item;
+        }
+        Item.arr=arr;
+        Item.arrX=arrX;
+        Item.MouseText=MouseText;
+
+        DrawDiagram(Item);
+    }
+
+
+</script>
+<style>
+    .bar
+    {
+        position: absolute;
+        right: 1px;
+        width: 140px;
+        height: calc(100vh - 50px);
+        border: 1px solid black;
+        color: white;
+        background-color: #181c57;
+    }
+
+    .nodemap
+    {
+        width: calc(100% - 140px);
+        height: calc(100vh - 55px);
+        min-width:100px;
+        min-height: 100px;
+        border: 1px solid black;
+        margin-top: 2px;
+    }
+
+
+    #idMaxHash
+    {
+        position: absolute;
+        z-index: 100;
+        left: 10px;
+        bottom: 16px;
+
+    }
+
+</style>
+
+<body>
+<DIV align2='center'>
+    <b>MODEL</b>
+    <button onclick="Start(1)">Run</button>
+    <button onclick="Start(0)">Stop</button>
+    Nodes:<input type="number" value="5" id="idNodeCount" style="width: 50px;" oninput="SaveValues()">
+    MaxTx:<input type="number" value="1" id="idTxCount" style="width: 50px;" oninput="SaveValues()">
+
+    <!--<button onclick="DoNormalizationXY()">Norm</button>-->
+
+    Latency:<input type="number" value="10" id="idMinLatency" style="width: 50px;" oninput="SaveValues()">
+    <input type="range" min="1" max="10" id="idBlockPerSec" value="1" oninput="SaveValues()">
+
+    <span id="idWorkNum"></span>
+
+
+    <!--command bar-->
+    <DIV class="bar">
+        <DIV align="center"><BR><B>MODE:</B></DIV><BR>
+        <input type="checkbox" id="idShowDiagram" onchange="SaveValues()">Diagram<BR>
+        <input type="checkbox" id="idUseSplitter" onchange="SaveValues()">Split<BR>
+        <input type="checkbox" id="idDeleteNode" onchange="SaveValues()">Recreates<BR>
+        <input type="checkbox" id="idUseTicket" checked onchange="SaveValues()">Tickets<BR>
+        <input type="checkbox" id="idUseBlockCache" checked onchange="SaveValues()">Cache<BR>
+        <input type="checkbox" id="idUsePackMaxHash" checked onchange="SaveValues()">Use pack MH<BR>
+
+        <input type="checkbox" id="idTestMode1" onchange="SaveValues()">Mode 1<BR>
+        <input type="checkbox" id="idTestMode2" onchange="SaveValues()">Mode 2<BR>
+        <input type="checkbox" id="idTestMode3" onchange="SaveValues()">Mode 3<BR>
+        <input type="checkbox" id="idRndTx" onchange="SaveValues()">Rnd tx<BR>
+        <BR>
+        <DIV id="idStatus"></DIV>
+    </DIV>
+
+
+    <!--canvas-->
+    <canvas class="nodemap" id='idMap' ></canvas>
+
+    <canvas  class="DIAGRAM" width='600' height='150' id='idMaxHash'></canvas>
+
+    </div>
+
+</DIV>
+
+</body>
+</html>
+
+<!--@project: TERA, @license: MIT (not for evil), @copyright: Yuriy Ivanov (Vtools) 2017-2019 [progr76@gmail.com]-->
+
+
