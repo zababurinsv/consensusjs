@@ -1,4 +1,4 @@
-module.exports = function (app) {
+export default function (app) {
 
     class ProofOfStakeConsensus extends app.CONSENSUS.ProofOfWorkConsensus {
         constructor(consensus_name, consensus_config_field) {

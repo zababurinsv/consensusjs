@@ -1,4 +1,4 @@
-module.exports = function (app) {
+export default function (app) {
 
     class DelegatedProofOfWorkConsensus extends app.CONSENSUS.ProofOfWorkConsensus {
         constructor(consensus_name, consensus_config_field) {
@@ -9,7 +9,7 @@ module.exports = function (app) {
         }
         /**
          * Delegates can be static and dynamic. This file about static delegates, dynamic in dynamic-dpow(s)
-         * @param PEER peer 
+         * @param PEER peer
          */
         isDataMatch(data, peer) {
             if (this.getConfig('delegateMode')) {//new block can emit more then 1 node:

@@ -1,41 +1,55 @@
-const EventEmitter = require('events');
-const merkle = require('merkle-tools')
+import EventEmitter from "/service/ReactNode/controlCenter/database/modules/eventemitter3/dist/index.js";
+import merkle from "/modules/merkle-tools/dist/index.js";
+import MODULE from './lib/mod.js';
+import PEER from './lib/entries/peer.js';
+import DATA from './lib/entries/data.js';
+import PEERMANAGER from './lib/mappers/peer.js';
+import DATAMANAGER from './lib/mappers/data.js';
+import CONSENSUS from './lib/entries/consensus.js';
+import VALIDATOR from './lib/entries/validator.js';
+import ROUNDMANAGER from './lib/mappers/round.js';
+import Centralized from './algo/centralized.js';
+import ProofOfWorkConsensus from './algo/pow.js';
+import ProofOfStakeConsensus from './algo/pos.js';
+import DelegatedProofOfWorkConsensus from './algo/static-dpow.js';
+import DelegatedProofOfStakeConsensus from './algo/static-dpos.js';
+import DynamicDelegateProofOfStakeConsensus from './algo/dynamic-dpos.js';
 
 class APP extends EventEmitter {
 
     constructor(config) {
         super();
-        this.MODULE = require("./lib/mod")(this);
+        this.MODULE = MODULE(this);
         this.config = {};
         this.config = Object.assign(this.config, this.getDefaultConfig(), config);
 
         if (!this.PEER)
-            this.PEER = require("./lib/entries/peer")(this);
+            this.PEER = PEER(this);
 
         if (!this.DATA)
-            this.DATA = require("./lib/entries/data")(this);
+            this.DATA = DATA(this);
 
         if (!this.PEERMANAGER)
-            this.PEERMANAGER = require("./lib/mappers/peer")(this);
+            this.PEERMANAGER = PEERMANAGER(this);
 
         if (!this.DATAMANAGER)
-            this.DATAMANAGER = require("./lib/mappers/data")(this);
+            this.DATAMANAGER = DATAMANAGER(this);
 
         if (!this.CONSENSUS)
-            this.CONSENSUS = require("./lib/entries/consensus")(this);
+            this.CONSENSUS = CONSENSUS(this);
 
         if (!this.VALIDATOR)
-            this.VALIDATOR = require("./lib/entries/validator")(this);
+            this.VALIDATOR = VALIDATOR(this);
 
         if (!this.ROUNDMANAGER)
-            this.ROUNDMANAGER = require("./lib/mappers/round")(this);
+            this.ROUNDMANAGER = ROUNDMANAGER(this);
 
-        this.CONSENSUS.Centralized = require('./algo/centralized')(this);
-        this.CONSENSUS.ProofOfWorkConsensus = require('./algo/pow')(this);
-        this.CONSENSUS.ProofOfStakeConsensus = require('./algo/pos')(this);
-        this.CONSENSUS.DelegatedProofOfWorkConsensus = require('./algo/static-dpow')(this);
-        this.CONSENSUS.DelegatedProofOfStakeConsensus = require('./algo/static-dpos')(this);
-        this.CONSENSUS.DynamicDelegateProofOfStakeConsensus = require('./algo/dynamic-dpos')(this);
+        this.CONSENSUS.Centralized = Centralized(this);
+        this.CONSENSUS.ProofOfWorkConsensus = ProofOfWorkConsensus(this);
+        this.CONSENSUS.ProofOfStakeConsensus = ProofOfStakeConsensus(this);
+        this.CONSENSUS.DelegatedProofOfWorkConsensus = DelegatedProofOfWorkConsensus(this);
+        this.CONSENSUS.DelegatedProofOfStakeConsensus = DelegatedProofOfStakeConsensus(this);
+        this.CONSENSUS.DynamicDelegateProofOfStakeConsensus = DynamicDelegateProofOfStakeConsensus(this);
     }
     definePeerClass(man) {
         this.PEER = man;
@@ -84,9 +98,9 @@ class APP extends EventEmitter {
             this.roundManager = new this.ROUNDMANAGER();
         this.emit("app.roundmanager");
 
-        //if (!this.config.algorithm)
-        //    throw new Error('Algorithm of consensus must be defined');
-
+        // if (!this.config.algorithm) {
+        //        throw new Error('Algorithm of consensus must be defined' );
+        // }
         this.initAlgorithm(this.config.algorithm, consensus);
     }
 
@@ -111,7 +125,6 @@ class APP extends EventEmitter {
                 cls = this.CONSENSUS.ProofOfStakeConsensus;//pow+pos
             if (algorithm_name == 'centralized')
                 cls = this.CONSENSUS.Centralized;
-
             if (!cls)
                 this.consensus = new this.CONSENSUS();
             else
@@ -136,7 +149,7 @@ class APP extends EventEmitter {
                 "blockcount": 12, ///number of blocks in target calculation
                 "blocktime": 300, //time of one block in seconds
                 "maxtarget": 1, //min difficulty
-                "excludeFirst": 1, //dont use this numbers blocks in calculation of new target 
+                "excludeFirst": 1, //dont use this numbers blocks in calculation of new target
                 "diffWindow": 120, //window of data, used for target
                 "diffCut": 6,
                 "changeBranchDelay": 0,//The number of blocks that we ignore when sidechain length is bigger then main chain,
@@ -201,4 +214,4 @@ class APP extends EventEmitter {
 
 }
 
-module.exports = APP;
+export default APP;

@@ -1,6 +1,6 @@
-const BN = require('bn.js');
+import BN from "/service/ReactNode/controlCenter/database/modules/bn.js/dist/index.js";
 
-module.exports = function (app) {
+export default function (app) {
 
     class dynamicDelegateProofOfStakeConsensus extends app.CONSENSUS {
 
